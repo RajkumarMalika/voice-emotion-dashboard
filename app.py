@@ -50,53 +50,65 @@ else:
 
     file = st.file_uploader("Upload Audio", type=["wav","mp3"])
     if file:
+        path = None
         prog = st.progress(0)
+        
+        try:
+            # Save uploaded file to temp file and ensure it's flushed
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(file.read())
+                tmp.flush()
+                path = tmp.name
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            tmp.write(file.read())
-            path = tmp.name
+            st.audio(file)
+            prog.progress(20)
 
-        st.audio(file)
-        prog.progress(20)
+            st.plotly_chart(plot_waveform(path), width="stretch")
+            prog.progress(40)
 
-        st.plotly_chart(plot_waveform(path), width="stretch")
-        prog.progress(40)
+            # Energy filter to detect silence
+            import librosa
+            audio_data, sr = librosa.load(path, sr=None)
+            energy = np.mean(np.abs(audio_data))
+            if energy < 0.02:
+                st.warning("⚠️ Silence detected - please upload audio with voice")
+                st.stop()
 
-        # Energy filter to detect silence
-        import librosa
-        audio_data, sr = librosa.load(path, sr=None)
-        energy = np.mean(np.abs(audio_data))
-        if energy < 0.02:
-            st.warning("⚠️ Silence detected - please upload audio with voice")
-            st.stop()
+            result = whisper_model.transcribe(path)
+            st.write("Transcript:", result["text"])
+            prog.progress(60)
 
-        result = whisper_model.transcribe(path)
-        st.write(result["text"])
-        prog.progress(60)
+            chunks = split_audio(path)
+            df = analyze_chunks(heavy_model, chunks)
+            prog.progress(80)
 
-        chunks = split_audio(path)
-        df = analyze_chunks(heavy_model, chunks)
-        os.remove(path)
-        prog.progress(80)
+            st.dataframe(df)
 
-        st.dataframe(df)
+            for _, r in df.iterrows():
+                st.markdown(
+                    f"<span style='background:{r['Color']};padding:6px;border-radius:6px;color:white;'>"
+                    f"{r['Time']}s {r['Emotion']}</span>",
+                    unsafe_allow_html=True
+                )
 
-        for _, r in df.iterrows():
-            st.markdown(
-                f"<span style='background:{r['Color']};padding:6px;border-radius:6px;color:white;'>"
-                f"{r['Time']}s {r['Emotion']}</span>",
-                unsafe_allow_html=True
-            )
+            st.subheader("Summary")
+            for s in generate_summary(df): st.write(s)
 
-        st.subheader("Summary")
-        for s in generate_summary(df): st.write(s)
+            st.metric("Interview Score", f"{interview_score(df)}/10")
+            st.plotly_chart(heatmap_chart(df), width="stretch")
+            st.plotly_chart(confidence_gauge(df["Confidence"].mean()), width="stretch")
 
-        st.metric("Interview Score", f"{interview_score(df)}/10")
-        st.plotly_chart(heatmap_chart(df), width="stretch")
-        st.plotly_chart(confidence_gauge(df["Confidence"].mean()), width="stretch")
+            st.plotly_chart(px.line(df, x="Time", y="Emotion"), width="stretch")
+            st.plotly_chart(px.pie(df, names="Emotion"), width="stretch")
 
-        st.plotly_chart(px.line(df, x="Time", y="Emotion"), width="stretch")
-        st.plotly_chart(px.pie(df, names="Emotion"), width="stretch")
-
-        prog.progress(100)
-        st.download_button("Download CSV", df.to_csv(index=False), "report.csv")
+            prog.progress(100)
+            st.download_button("Download CSV", df.to_csv(index=False), "report.csv")
+            
+        except FileNotFoundError:
+            st.error("❌ Audio file not found. Try uploading again.")
+        except Exception as e:
+            st.error(f"❌ Error processing audio: {str(e)}")
+        finally:
+            # Cleanup temp file
+            if path and os.path.exists(path):
+                os.remove(path)
