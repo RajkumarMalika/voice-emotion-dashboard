@@ -3,6 +3,8 @@ import tempfile, os
 import plotly.express as px
 import whisper
 import numpy as np
+import librosa
+import soundfile as sf
 
 from emotion_model import load_heavy_model, load_light_model
 from utils import *
@@ -11,6 +13,14 @@ from streamlit_webrtc import webrtc_streamer
 
 st.set_page_config(layout="wide")
 st.title("🎙️ AI Voice Emotion Analytics")
+
+# Initialize session state
+if 'audio_path' not in st.session_state:
+    st.session_state.audio_path = None
+if 'audio_data' not in st.session_state:
+    st.session_state.audio_data = None
+if 'sr' not in st.session_state:
+    st.session_state.sr = None
 
 dark = st.sidebar.toggle("🌙 Dark Mode")
 mode = st.sidebar.radio("Mode", ["Upload Analysis", "Real-Time"])
@@ -50,15 +60,24 @@ else:
 
     file = st.file_uploader("Upload Audio", type=["wav","mp3"])
     if file:
-        path = None
         prog = st.progress(0)
         
         try:
-            # Save uploaded file to temp file and ensure it's flushed
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                tmp.write(file.read())
-                tmp.flush()
-                path = tmp.name
+            # Save uploaded file to temp file once
+            if st.session_state.audio_path is None:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                    tmp.write(file.read())
+                    tmp.flush()
+                    st.session_state.audio_path = tmp.name
+                
+                # Load and store audio in session state
+                audio_data, sr = librosa.load(st.session_state.audio_path, sr=16000)
+                st.session_state.audio_data = audio_data
+                st.session_state.sr = sr
+            
+            path = st.session_state.audio_path
+            audio_data = st.session_state.audio_data
+            sr = st.session_state.sr
 
             st.audio(file)
             prog.progress(20)
@@ -67,8 +86,6 @@ else:
             prog.progress(40)
 
             # Energy filter to detect silence
-            import librosa
-            audio_data, sr = librosa.load(path, sr=None)
             energy = np.mean(np.abs(audio_data))
             if energy < 0.02:
                 st.warning("⚠️ Silence detected - please upload audio with voice")
@@ -109,6 +126,17 @@ else:
         except Exception as e:
             st.error(f"❌ Error processing audio: {str(e)}")
         finally:
-            # Cleanup temp file
-            if path and os.path.exists(path):
-                os.remove(path)
+            # Cleanup temp file when done
+            if st.session_state.audio_path and os.path.exists(st.session_state.audio_path):
+                try:
+                    os.remove(st.session_state.audio_path)
+                    st.session_state.audio_path = None
+                    st.session_state.audio_data = None
+                    st.session_state.sr = None
+                except:
+                    pass
+    else:
+        # Reset session state if no file is uploaded
+        st.session_state.audio_path = None
+        st.session_state.audio_data = None
+        st.session_state.sr = None
