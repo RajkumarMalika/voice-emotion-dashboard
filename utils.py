@@ -24,8 +24,11 @@ emotion_score_map = {
 }
 
 # -------- SPLIT AUDIO --------
-def split_audio(file_path, chunk_duration=3):
-    y, sr = librosa.load(file_path, sr=16000)
+def split_audio(file_path=None, chunk_duration=3, y=None, sr=16000):
+    if y is None:
+        if file_path is None:
+            raise ValueError("file_path or y must be provided")
+        y, sr = librosa.load(file_path, sr=sr)
     chunk_samples = chunk_duration * sr
     chunks = []
 
@@ -64,8 +67,11 @@ def analyze_chunks(model, chunks):
     return pd.DataFrame(results)
 
 # -------- WAVEFORM --------
-def plot_waveform(path):
-    y, sr = librosa.load(path)
+def plot_waveform(path=None, y=None, sr=16000):
+    if y is None:
+        if path is None:
+            raise ValueError("path or y must be provided")
+        y, sr = librosa.load(path, sr=sr)
     fig = go.Figure()
     fig.add_trace(go.Scatter(y=y))
     fig.update_layout(title="Audio Waveform")

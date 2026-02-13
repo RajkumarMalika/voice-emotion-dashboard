@@ -28,7 +28,8 @@ def get_heavy(): return load_heavy_model()
 def get_light(): return load_light_model()
 
 @st.cache_resource
-def get_whisper(): return whisper.load_model("tiny")
+def get_whisper():
+    return whisper.load_model("tiny", device="cpu")
 
 # -------- REALTIME --------
 if mode == "Real-Time":
@@ -57,8 +58,8 @@ if mode == "Real-Time":
 
 # -------- UPLOAD --------
 else:
-    heavy_model = get_heavy()
-    whisper_model = get_whisper()
+    use_heavy_model = st.sidebar.checkbox("Use heavy model (more memory)", value=False)
+    enable_transcription = st.sidebar.checkbox("Transcribe with Whisper", value=True)
 
     file = st.file_uploader("Upload Audio", type=["wav","mp3"])
     if file:
@@ -82,22 +83,26 @@ else:
             st.audio(file)
             prog.progress(20)
 
-            st.plotly_chart(plot_waveform(path), width="stretch")
+            # Load audio once to avoid repeated disk reads
+            audio_data, sr = librosa.load(path, sr=16000)
+            st.plotly_chart(plot_waveform(y=audio_data, sr=sr), width="stretch")
             prog.progress(40)
 
-            # Load and check audio energy
-            audio_data, sr = librosa.load(path, sr=16000)
+            # Check audio energy
             energy = np.mean(np.abs(audio_data))
             if energy < 0.02:
                 st.warning("⚠️ Silence detected - please upload audio with voice")
                 st.stop()
 
-            result = whisper_model.transcribe(path)
-            st.write("Transcript:", result["text"])
+            if enable_transcription:
+                whisper_model = get_whisper()
+                result = whisper_model.transcribe(path)
+                st.write("Transcript:", result["text"])
             prog.progress(60)
 
-            chunks = split_audio(path)
-            df = analyze_chunks(heavy_model, chunks)
+            model = get_heavy() if use_heavy_model else get_light()
+            chunks = split_audio(y=audio_data, sr=sr)
+            df = analyze_chunks(model, chunks)
             prog.progress(80)
 
             st.dataframe(df)
