@@ -85,7 +85,7 @@ else:
 
             # Load audio once to avoid repeated disk reads
             audio_data, sr = librosa.load(path, sr=16000)
-            st.plotly_chart(plot_waveform(y=audio_data, sr=sr), width="stretch")
+            st.plotly_chart(plot_waveform(path=path, sr=sr), width="stretch")
             prog.progress(40)
 
             # Check audio energy
