@@ -15,12 +15,8 @@ st.set_page_config(layout="wide")
 st.title("🎙️ AI Voice Emotion Analytics")
 
 # Initialize session state
-if 'audio_path' not in st.session_state:
-    st.session_state.audio_path = None
-if 'audio_data' not in st.session_state:
-    st.session_state.audio_data = None
-if 'sr' not in st.session_state:
-    st.session_state.sr = None
+if 'processed_file_id' not in st.session_state:
+    st.session_state.processed_file_id = None
 
 dark = st.sidebar.toggle("🌙 Dark Mode")
 mode = st.sidebar.radio("Mode", ["Upload Analysis", "Real-Time"])
@@ -60,24 +56,22 @@ else:
 
     file = st.file_uploader("Upload Audio", type=["wav","mp3"])
     if file:
+        # Generate unique file ID
+        file_id = f"{file.name}_{file.size}"
+        
+        # Check if this is a new file
+        if st.session_state.processed_file_id != file_id:
+            st.session_state.processed_file_id = file_id
+            
         prog = st.progress(0)
+        path = None
         
         try:
-            # Save uploaded file to temp file once
-            if st.session_state.audio_path is None:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                    tmp.write(file.read())
-                    tmp.flush()
-                    st.session_state.audio_path = tmp.name
-                
-                # Load and store audio in session state
-                audio_data, sr = librosa.load(st.session_state.audio_path, sr=16000)
-                st.session_state.audio_data = audio_data
-                st.session_state.sr = sr
-            
-            path = st.session_state.audio_path
-            audio_data = st.session_state.audio_data
-            sr = st.session_state.sr
+            # Create temp file from uploaded file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(file.getvalue())
+                tmp.flush()
+                path = tmp.name
 
             st.audio(file)
             prog.progress(20)
@@ -85,7 +79,8 @@ else:
             st.plotly_chart(plot_waveform(path), width="stretch")
             prog.progress(40)
 
-            # Energy filter to detect silence
+            # Load and check audio energy
+            audio_data, sr = librosa.load(path, sr=16000)
             energy = np.mean(np.abs(audio_data))
             if energy < 0.02:
                 st.warning("⚠️ Silence detected - please upload audio with voice")
@@ -121,22 +116,19 @@ else:
             prog.progress(100)
             st.download_button("Download CSV", df.to_csv(index=False), "report.csv")
             
-        except FileNotFoundError:
-            st.error("❌ Audio file not found. Try uploading again.")
+        except FileNotFoundError as e:
+            st.error(f"❌ Audio file not found: {str(e)}")
         except Exception as e:
             st.error(f"❌ Error processing audio: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
         finally:
-            # Cleanup temp file when done
-            if st.session_state.audio_path and os.path.exists(st.session_state.audio_path):
+            # Always cleanup temp file
+            if path and os.path.exists(path):
                 try:
-                    os.remove(st.session_state.audio_path)
-                    st.session_state.audio_path = None
-                    st.session_state.audio_data = None
-                    st.session_state.sr = None
+                    os.remove(path)
                 except:
                     pass
     else:
-        # Reset session state if no file is uploaded
-        st.session_state.audio_path = None
-        st.session_state.audio_data = None
-        st.session_state.sr = None
+        # Reset when no file uploaded
+        st.session_state.processed_file_id = None
