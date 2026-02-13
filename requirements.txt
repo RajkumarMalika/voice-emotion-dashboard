@@ -2,10 +2,6 @@ streamlit
 streamlit-webrtc
 librosa
 transformers
-torch
-plotly
-pandas
-numpy
-soundfile
+torch==2.2.2+cpu --extra-index-url https://download.pytorch.org/whl/cpu
 pydub
 openai-whisper

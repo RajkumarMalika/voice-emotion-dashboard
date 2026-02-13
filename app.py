@@ -52,7 +52,7 @@ else:
     if file:
         prog = st.progress(0)
 
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(file.read())
             path = tmp.name
 
@@ -61,6 +61,14 @@ else:
 
         st.plotly_chart(plot_waveform(path), width="stretch")
         prog.progress(40)
+
+        # Energy filter to detect silence
+        import librosa
+        audio_data, sr = librosa.load(path, sr=None)
+        energy = np.mean(np.abs(audio_data))
+        if energy < 0.02:
+            st.warning("⚠️ Silence detected - please upload audio with voice")
+            st.stop()
 
         result = whisper_model.transcribe(path)
         st.write(result["text"])
