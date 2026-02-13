@@ -1,0 +1,11 @@
+streamlit
+streamlit-webrtc
+librosa
+transformers
+torch
+plotly
+pandas
+numpy
+soundfile
+pydub
+openai-whisper
