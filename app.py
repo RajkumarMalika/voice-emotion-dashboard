@@ -33,7 +33,13 @@ def get_whisper(): return whisper.load_model("tiny")
 # -------- REALTIME --------
 if mode == "Real-Time":
     st.subheader("🎤 Live Emotion")
-    light_model = get_light()
+    
+    try:
+        light_model = get_light()
+    except Exception as e:
+        st.error(f"❌ Failed to load real-time emotion model: {str(e)}")
+        st.info("This might be due to model download issues or configuration problems.")
+        st.stop()
 
     webrtc_streamer(key="mic", audio_frame_callback=audio_callback)
 
